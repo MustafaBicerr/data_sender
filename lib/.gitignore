@@ -1,0 +1,58 @@
+# Flutter/Dart
+.dart_tool/
+.packages
+.pub-cache/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.melos_tool/
+coverage/
+pubspec.lock
+
+# IDE / Editor
+.idea/
+.vscode/
+*.iml
+
+# Android
+android/.gradle/
+android/local.properties
+android/app/debug
+android/app/profile
+android/app/release
+*.keystore
+*.jks
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/ephemeral/
+macos/Flutter/ephemeral/
+
+# Windows / Linux
+windows/flutter/ephemeral/
+linux/flutter/ephemeral/
+
+# Web
+web/.dart_tool/
+
+# Env / Secrets
+*.env
+*.env.*
+.env
+.env.*
+*.pem
+*.p12
+*.cer
+*.crt
+*.key
+
+# Crash / logs
+*.log
+
+# System files
+.DS_Store
+Thumbs.db

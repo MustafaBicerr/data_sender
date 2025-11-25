@@ -1,0 +1,6 @@
+[
+    {
+        "merged": "com.google_mlkit_text_recognition-release-32:/layout-v26/abc_screen_toolbar.xml",
+        "source": "com.google_mlkit_text_recognition-appcompat-1.6.1-11:/layout-v26/abc_screen_toolbar.xml"
+    }
+]

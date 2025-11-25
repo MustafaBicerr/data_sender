@@ -1,0 +1,10 @@
+[
+    {
+        "merged": "com.google_mlkit_text_recognition-release-32:/layout-watch-v20/abc_alert_dialog_button_bar_material.xml",
+        "source": "com.google_mlkit_text_recognition-appcompat-1.6.1-11:/layout-watch-v20/abc_alert_dialog_button_bar_material.xml"
+    },
+    {
+        "merged": "com.google_mlkit_text_recognition-release-32:/layout-watch-v20/abc_alert_dialog_title_material.xml",
+        "source": "com.google_mlkit_text_recognition-appcompat-1.6.1-11:/layout-watch-v20/abc_alert_dialog_title_material.xml"
+    }
+]

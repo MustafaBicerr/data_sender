@@ -1,0 +1,18 @@
+[
+    {
+        "merged": "io.scer.pdf_renderer.pdfx-release-25:/layout-v21/notification_template_custom_big.xml",
+        "source": "io.scer.pdf_renderer.pdfx-core-1.13.1-7:/layout-v21/notification_template_custom_big.xml"
+    },
+    {
+        "merged": "io.scer.pdf_renderer.pdfx-release-25:/layout-v21/notification_action.xml",
+        "source": "io.scer.pdf_renderer.pdfx-core-1.13.1-7:/layout-v21/notification_action.xml"
+    },
+    {
+        "merged": "io.scer.pdf_renderer.pdfx-release-25:/layout-v21/notification_template_icon_group.xml",
+        "source": "io.scer.pdf_renderer.pdfx-core-1.13.1-7:/layout-v21/notification_template_icon_group.xml"
+    },
+    {
+        "merged": "io.scer.pdf_renderer.pdfx-release-25:/layout-v21/notification_action_tombstone.xml",
+        "source": "io.scer.pdf_renderer.pdfx-core-1.13.1-7:/layout-v21/notification_action_tombstone.xml"
+    }
+]

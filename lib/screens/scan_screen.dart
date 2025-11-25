@@ -398,7 +398,7 @@ import '../services/validators.dart';
 import 'edit_invoice_screen.dart';
 import '../theme/app_theme.dart';
 import '../services/receipt_parser.dart'; // ReceiptParser2
-import '../models/receipt_header.dart';
+// import '../models/receipt_header.dart';
 
 // --- Body parserlar: isim çakışmasını önlemek için prefix kullanıyoruz
 import '../services/receipt_body_parser.dart' as seq; // satır-satır parser

@@ -279,6 +279,7 @@ import 'dart:ui';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:image_picker/image_picker.dart';
 
 enum PickMode { camera, files }
 
@@ -303,6 +304,7 @@ class OcrService {
   final TextRecognizer _recognizer = TextRecognizer(
     script: TextRecognitionScript.latin,
   );
+  final ImagePicker _imagePicker = ImagePicker();
 
   // 🟢 son taramanın ham sonucu
   OcrResult? lastResult;
@@ -337,6 +339,7 @@ class OcrService {
           type: FileType.custom,
           allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
         );
+
         if (res == null || res.files.isEmpty) {
           debugPrint('[OCR] files: user cancelled');
           return null;
@@ -344,6 +347,11 @@ class OcrService {
         final path = res.files.single.path!;
         file = File(path);
         debugPrint('[OCR] files: picked path=$path');
+      } else if (mode == PickMode.camera) {
+        // 📷 KAMERADAN TARA
+        final picked = await _imagePicker.pickImage(source: ImageSource.camera);
+        if (picked == null) return null;
+        file = File(picked.path);
       } else {
         // Kamerayı da kullanacaksan burada kendi image picker akışını ekleyebilirsin.
         // Şimdilik dosya ile aynı davranalım:

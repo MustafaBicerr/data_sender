@@ -1,4 +1,4 @@
-#Mon Oct 13 13:53:07 TRT 2025
+#Tue Nov 18 00:43:48 TRT 2025
 base.0=C\:\\projects\\data_sender\\build\\app\\intermediates\\dex\\debug\\mergeExtDexDebug\\classes.dex
 base.1=C\:\\projects\\data_sender\\build\\app\\intermediates\\dex\\debug\\mergeLibDexDebug\\0\\classes.dex
 base.2=C\:\\projects\\data_sender\\build\\app\\intermediates\\dex\\debug\\mergeProjectDexDebug\\0\\classes.dex

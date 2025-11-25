@@ -54,33 +54,35 @@ class _HomeScreenState extends State<HomeScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.photo_camera),
-                    label: const Text('Kameradan Tara'),
-                    onPressed: () {
-                      s.createNewInvoice();
-                      Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const ScanScreen()),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.folder_open),
-                    label: const Text('Dosyadan Tara'),
-                    onPressed: () {
-                      s.createNewInvoice();
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const ScanScreen(fromFiles: true),
-                        ),
-                      );
-                    },
-                  ),
-                ),
+                // Expanded(
+                //   child: ElevatedButton.icon(
+                //     icon: const Icon(Icons.photo_camera),
+                //     label: const Text('Kameradan Tara'),
+                //     onPressed: () {
+                //       s.createNewInvoice();
+                //       Navigator.of(context).push(
+                //         MaterialPageRoute(
+                //           builder: (_) => const ScanScreen(fromFiles: false),
+                //         ),
+                //       );
+                //     },
+                //   ),
+                // ),
+                // const SizedBox(width: 12),
+                // Expanded(
+                //   child: ElevatedButton.icon(
+                //     icon: const Icon(Icons.folder_open),
+                //     label: const Text('Dosyadan Tara'),
+                //     onPressed: () {
+                //       s.createNewInvoice();
+                //       Navigator.of(context).push(
+                //         MaterialPageRoute(
+                //           builder: (_) => const ScanScreen(fromFiles: true),
+                //         ),
+                //       );
+                //     },
+                //   ),
+                // ),
               ],
             ),
           ),

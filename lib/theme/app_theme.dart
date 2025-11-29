@@ -38,7 +38,13 @@ ThemeData buildAppTheme() {
 class GradientHeader extends StatelessWidget {
   final String title;
   final List<Widget>? actions;
-  const GradientHeader({super.key, required this.title, this.actions});
+  final Widget? leading;
+  const GradientHeader({
+    super.key,
+    required this.title,
+    this.actions,
+    this.leading,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -56,16 +62,31 @@ class GradientHeader extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: 22,
-              ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // LEADING
+                if (leading != null) ...[leading!, const SizedBox(width: 12)],
+
+                // TITLE (merkeze denk gelsin diye Expanded)
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+
+                // ACTIONS
+                if (actions != null)
+                  Row(mainAxisSize: MainAxisSize.min, children: actions!),
+              ],
             ),
           ),
-          if (actions != null) ...actions!,
+          // if (actions != null) ...actions!,
         ],
       ),
     );

@@ -201,7 +201,7 @@
     },
     {
       "name": "http",
-      "rootUri": "file:///C:/Users/mbice/AppData/Local/Pub/Cache/hosted/pub.dev/http-1.5.0",
+      "rootUri": "file:///C:/Users/mbice/AppData/Local/Pub/Cache/hosted/pub.dev/http-1.6.0",
       "packageUri": "lib/",
       "languageVersion": "3.4"
     },
@@ -518,7 +518,7 @@
       "languageVersion": "3.7"
     }
   ],
-  "generated": "2025-10-13T10:14:22.965721Z",
+  "generated": "2025-11-28T14:39:26.297274Z",
   "generator": "pub",
   "generatorVersion": "3.7.2",
   "flutterRoot": "file:///C:/flutter",

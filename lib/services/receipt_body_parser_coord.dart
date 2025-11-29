@@ -1,36 +1,22 @@
 // lib/services/receipt_body_parser_coord.dart
 import 'dart:math';
 import 'package:flutter/foundation.dart';
-import 'ocr_service.dart'; // OcrElement için
 
-/// Çıktı modelin (sen zaten benzerini kullanıyorsun)
-class LineItem {
-  final String name;
-  final double? vatPercent;
-  final double? quantity;
-  final double? weight; // kg
-  final String? weightUnit; // "kg"
-  final double totalPrice;
-  LineItem({
-    required this.name,
-    required this.totalPrice,
-    this.vatPercent,
-    this.quantity,
-    this.weight,
-    this.weightUnit,
-  });
-}
+import 'ocr_service.dart'; // OcrElement icin
+import '../models/receipt_models.dart' as rm;
 
-/// Görünür format (UI’da tek satır string)
-String formatLineItem(LineItem it) {
+/// Gorunur format (UI icin tek satir string)
+String formatLineItem(rm.LineItem it) {
   final parts = <String>[];
   parts.add(it.name);
-  if (it.vatPercent != null) parts.add('%${it.vatPercent!.toStringAsFixed(0)}');
+  if (it.vatPercent != null) {
+    parts.add('%${it.vatPercent}');
+  }
   parts.add('= ${it.totalPrice.toStringAsFixed(2)}');
   return parts.join('  ');
 }
 
-// —————— Yardımcılar ——————
+// —————— Yardimci regexler ——————
 final _moneyRe = RegExp(r'(?<!\d)(\d{1,3}(?:\.\d{3})*,\d{2})(?!\d)');
 final _vatRe = RegExp(r'%\s*([0-9]{1,2})');
 final _starRe = RegExp(r'^[\*\u204E\u2715\u2731\u22C6\u00D7\u2219]$');
@@ -43,10 +29,10 @@ double? _parseMoneyTR(String s) {
   return double.tryParse(t);
 }
 
-double? _parseVat(String s) {
+int? _parseVat(String s) {
   final m = _vatRe.firstMatch(s);
   if (m == null) return null;
-  return double.tryParse(m.group(1)!);
+  return int.tryParse(m.group(1)!);
 }
 
 bool _isMoney(String s) => _moneyRe.hasMatch(s);
@@ -59,7 +45,7 @@ double _median(Iterable<double> xs) {
   return a.length.isOdd ? a[mid] : (a[mid - 1] + a[mid]) / 2.0;
 }
 
-/// Y koordinatına göre satıra kümeleme
+/// Y koordinatina gore satira gruplama
 List<List<OcrElement>> _clusterRows(
   List<OcrElement> all, {
   void Function(String m)? log,
@@ -83,7 +69,8 @@ List<List<OcrElement>> _clusterRows(
     }
   }
   rows.add(current);
-  // Sıraları soldan sağa sırala
+
+  // Satirlari soldan saga sirala
   for (final r in rows) {
     r.sort((a, b) => a.box.left.compareTo(b.box.left));
   }
@@ -93,7 +80,7 @@ List<List<OcrElement>> _clusterRows(
   return rows;
 }
 
-/// Sağ (fiyat) ve orta (%KDV) kolonlarının x-merkezleri
+/// Sag (fiyat) ve orta (KDV) kolon x-merkezleri
 ({double rightX, double? midX}) _estimateBands(List<List<OcrElement>> rows) {
   final priceXs = <double>[];
   final vatXs = <double>[];
@@ -110,13 +97,13 @@ List<List<OcrElement>> _clusterRows(
 
 bool _near(double v, double center, double band) => (v - center).abs() <= band;
 
-/// Koordinat tabanlı satır-parsesi.
-/// Not: Başlangıcı otomatik bulur (ilk isabetli satır), bitişte “TOPLAM/TOPKDV/KDV Oranı” gibi anahtarlarla durur.
-List<LineItem> parseByGeometry({
+/// Koordinat tabanli satir parsesi.
+/// Baslangici otomatik bulur, bitiste TOPLAM / TOPKDV / KDV Orani ile durur.
+List<rm.LineItem> parseByGeometry({
   required List<OcrElement> elements,
   void Function(String m)? log,
 }) {
-  final items = <LineItem>[];
+  final items = <rm.LineItem>[];
   if (elements.isEmpty) return items;
 
   final rows = _clusterRows(elements, log: log);
@@ -132,28 +119,29 @@ List<LineItem> parseByGeometry({
   for (int i = 0; i < rows.length; i++) {
     final r = rows[i];
     final rText = r.map((e) => e.text).join(' ');
-    // bitiş kontrol
+
+    // Bitis kontrolu
     if (RegExp(
-      r'\b(TOPLAM|TOPKDV|KDV\s*Oranı)\b',
+      r'\b(TOPLAM|TOPKDV|KDV\s*Orani)\b',
       caseSensitive: false,
     ).hasMatch(rText)) {
       if (started) break;
     }
 
-    // Sağ bandaki para: en sağdaki para olsun
+    // Sag bandaki para: en sagdaki para
     final rightC = bands.rightX;
     final priceCandidates = r.where((e) => _isMoney(e.text)).toList();
     OcrElement? priceEl;
     if (priceCandidates.isNotEmpty) {
       priceCandidates.sort((a, b) => a.centerX.compareTo(b.centerX));
       priceEl = priceCandidates.last;
-      // Yeterince sağda mı?
+      // Yeterince sagda mi? Gerekirse tolX ile kontrol edebilirsin.
       if (!_near(priceEl.centerX, rightC, tolX)) {
-        // farklı düzenlerde sağ band kayabilir; yine de kullan
+        // farkli duzenlerde sag band kayabilir; yine de kullan
       }
     }
 
-    // Vat orta bant
+    // Orta band (KDV)
     OcrElement? vatEl;
     if (bands.midX != null) {
       final midC = bands.midX!;
@@ -164,12 +152,11 @@ List<LineItem> parseByGeometry({
           );
       if (mids.isNotEmpty) vatEl = mids.first;
     } else {
-      // orta band yoksa, satırdaki %… elementlerinden en yakını
       final mids = r.where((e) => _isVat(e.text)).toList();
       if (mids.isNotEmpty) vatEl = mids.first;
     }
 
-    // Name: kalanlar (tek karakterli star vb. hariç)
+    // Name: kalanlar (tek karakter star vs. haric)
     final nameEls = <OcrElement>[];
     for (final e in r) {
       if (identical(e, priceEl) || identical(e, vatEl)) continue;
@@ -187,9 +174,9 @@ List<LineItem> parseByGeometry({
       started = true;
     }
     if (started && isValidRow) {
-      items.add(LineItem(name: name, totalPrice: price!, vatPercent: vat));
+      items.add(rm.LineItem(name: name, totalPrice: price!, vatPercent: vat));
       log?.call(
-        '[COORD] + item: name="$name"  vat=${vat?.toStringAsFixed(0)}  total=${price!.toStringAsFixed(2)}',
+        '[COORD] + item: name="$name"  vat=$vat  total=${price!.toStringAsFixed(2)}',
       );
     }
   }

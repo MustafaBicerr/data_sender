@@ -1,65 +1,23 @@
 // lib/services/receipt_body_parser.dart
 import 'dart:math';
 
-/// Basit satır kalemi modeli
-class LineItem {
-  final String name;
-  final double? quantity; // örn. "3 x 6,95" için 3
-  final double? weight; // örn. "1,535 kg"
-  final String? weightUnit;
-  final int? vatPercent; // %18
-  final double totalPrice;
+// Ana model
+import '../models/receipt_models.dart';
 
-  LineItem({
-    required this.name,
-    required this.totalPrice,
-    this.quantity,
-    this.weight,
-    this.weightUnit,
-    this.vatPercent,
-  });
-
-  LineItem copyWith({
-    String? name,
-    double? totalPrice,
-    double? quantity,
-    double? weight,
-    String? weightUnit,
-    int? vatPercent,
-  }) {
-    return LineItem(
-      name: name ?? this.name,
-      totalPrice: totalPrice ?? this.totalPrice,
-      quantity: quantity ?? this.quantity,
-      weight: weight ?? this.weight,
-      weightUnit: weightUnit ?? this.weightUnit,
-      vatPercent: vatPercent ?? this.vatPercent,
-    );
-  }
-}
-
-/// Toplamlar
-class TotalsResult {
-  double? toplam;
-  double? topkdv;
-
-  TotalsResult({this.toplam, this.topkdv});
-}
-
-/// Metni normalize et: boşlukları sadeleştir, süper-script * vs.
+/// Metni normalize et: bosluklari sadelestir, isaretleri duzenle
 String normalizeText(String s) {
   var t = s;
-  // olası "süperscript yıldız" / çarpı işareti varyasyonları
+  // olasi "superscript yildiz" / carpma isareti varyasyonlari
   t = t.replaceAll(RegExp(r'[×xX⋆∗•·▪∙•]'), '*');
-  // Nokta / virgül karışımı
+  // birden fazla boslugu teke indir
   t = t.replaceAll(RegExp(r'\s+'), ' ').trim();
   return t;
 }
 
-/// "*, 9,95" benzeri tutarın yakalanması
+/// "*, 9,95" benzeri tutarin yakalanmasi
 double? _parseAmount(String s) {
   final t = normalizeText(s);
-  // başında * olabilen tek değer
+  // basinda * olabilen tek deger
   final m = RegExp(r'^\*?\s*([0-9]{1,3}(?:[.,][0-9]{2}))$').firstMatch(t);
   if (m != null) {
     return double.tryParse(
@@ -85,7 +43,7 @@ double? _parseAmount(String s) {
   return null;
 }
 
-/// "1,535 kg x 14,90" benzeri ağırlık satırı
+/// "1,535 kg x 14,90" benzeri agirlik satiri
 ({double w, String unit, double price})? _parseWeightUnit(String s) {
   final t = normalizeText(s).toLowerCase();
   final m = RegExp(
@@ -102,7 +60,7 @@ double? _parseAmount(String s) {
   return null;
 }
 
-/// "%18" gibi KDV yüzdesini çıkar
+/// "%18" gibi KDV yuzdesini cikar
 int? extractVatPercent(String s) {
   final t = normalizeText(s);
   final m = RegExp(r'^%0*([0-9]{1,2})$').firstMatch(t);
@@ -110,56 +68,70 @@ int? extractVatPercent(String s) {
   return null;
 }
 
-/// Toplam bloklarını basitçe çıkar (TOPKDV / TOPLAM)
-TotalsResult extractTotals(List<String> lines) {
-  final res = TotalsResult();
+/// Toplam bloklarini ReceiptTotals olarak cikar (TOPKDV / TOPLAM)
+ReceiptTotals extractTotals(List<String> lines) {
+  double? topKdv;
+  double? total;
+  // paymentMethod / bank / provisionNo icin simdilik yalnizca null donuyoruz
+  String? paymentMethod;
+  String? bank;
+  String? provisionNo;
+
   for (int i = 0; i < lines.length; i++) {
     final l = normalizeText(lines[i]).toUpperCase();
+
     if (l.contains('TOPKDV')) {
-      // bir sonraki satır veya aynı satırda tutar olabilir
-      // önce aynı satırda ara
+      // ayni satirda tutar olabilir
       final same = RegExp(r'([0-9]{1,3}(?:[.,][0-9]{2}))').firstMatch(l);
       if (same != null) {
-        res.topkdv = double.parse(
+        topKdv = double.parse(
           same.group(1)!.replaceAll('.', '').replaceAll(',', '.'),
         );
       } else if (i + 1 < lines.length) {
         final nxt = _parseAmount(lines[i + 1]);
-        if (nxt != null) res.topkdv = nxt;
+        if (nxt != null) topKdv = nxt;
       }
     }
+
     if (l.contains('TOPLAM')) {
-      // toplama en yakın sayı
+      // once bir sonraki satira bak
       if (i + 1 < lines.length) {
         final nxt = _parseAmount(lines[i + 1]);
-        if (nxt != null) res.toplam = nxt;
+        if (nxt != null) total = nxt;
       }
-      // son çare: satırın içinde ara
+      // son care: satirin icinde ara
       final same = RegExp(r'([0-9]{1,3}(?:[.,][0-9]{2}))').firstMatch(l);
       if (same != null) {
-        res.toplam ??= double.parse(
+        total ??= double.parse(
           same.group(1)!.replaceAll('.', '').replaceAll(',', '.'),
         );
       }
     }
   }
-  return res;
+
+  return ReceiptTotals(
+    topKdv: topKdv,
+    total: total,
+    paymentMethod: paymentMethod,
+    bank: bank,
+    provisionNo: provisionNo,
+  );
 }
 
-/// Body başlangıcını bulur: ardışık satırlarda (en fazla next 6 satır)
-/// bir KDV yüzdesi (%..) ve sonrasında *li bir tutar görülen ilk konum.
-/// Dönüş: ürün isim kuyruğunun başlayacağı index.
+/// Body baslangicini bulur: ardisaq satirlarda (en fazla next 6 satir)
+/// bir KDV yuzdesi (%..) ve sonrasinda tutar gorulen ilk konum.
+/// Donus: urun isim kuyugunun baslayacagi index.
 int _findBodyStart(List<String> lines, {void Function(String)? log}) {
   int best = 0;
   for (int i = 0; i < lines.length; i++) {
-    // Totallerin altına inmeyelim
+    // Totallerin altina inmeyelim
     final upper = normalizeText(lines[i]).toUpperCase();
     if (upper.contains('KDV ORANI') ||
         upper.contains('KDV ORANI KDV DAHIL TUTAR')) {
       break;
     }
 
-    // i sonrası 6 satıra bak: önce bir %.., sonra *.., yani fiyat
+    // i sonrasindaki 6 satira bak: once bir %.. sonra fiyat
     bool seenVat = false;
     bool seenPriceAfterVat = false;
     for (int j = i + 1; j <= min(i + 6, lines.length - 1); j++) {
@@ -184,7 +156,7 @@ int _findBodyStart(List<String> lines, {void Function(String)? log}) {
   return best;
 }
 
-/// Adı, KDV’yi ve toplamı düzgün yazmak için
+/// Adi, KDV’yi ve toplami duzgun yazmak icin (UI icin)
 String formatLineItem(LineItem it) {
   final parts = <String>[it.name];
   if (it.quantity != null) parts.add('${it.quantity!.toStringAsFixed(0)}x');
@@ -197,29 +169,26 @@ String formatLineItem(LineItem it) {
   return parts.join('  ');
 }
 
-/// Ana gövdeyi satır satır çözer.
-/// Strateji:
-/// 1) Body başlangıcını _findBodyStart ile kestir.
-/// 2) “isim kuyruğu” (queue) tut: her metin satırı olası ürün adıdır.
-/// 3) Bir yerde %.. gelirse pendingVat al; fiyat görünce kuyruğun son adını
-///    kullanarak kalem oluştur (adı kaçmadığı için kayma olmaz).
+/// Ana govdeyi satir satir cozer.
+/// Donus: models/receipt_models.dart taki LineItem listesi.
 List<LineItem> parseBodySequential(
   List<String> originalLines, {
   void Function(String)? log,
 }) {
-  // Normalize edilip boş olmayan satırlar
+  // Normalize edilip bos olmayan satirlar
   final lines =
       originalLines.map(normalizeText).where((e) => e.isNotEmpty).toList();
 
   log?.call('parsing started; lines=${lines.length}');
 
-  // 1) Body başlangıcı
+  // 1) Body baslangici
   final start = _findBodyStart(lines, log: log);
 
   // 2) Kuyruk ve durum
   final nameQueue = <String>[];
   int? pendingVat;
-  double? pendingUnitByQty; // 3 x 6,95 türünden ara bilgi
+  double?
+  pendingUnitByQty; // 3 x 6,95 turunden ara bilgi (simdilik kullanmiyoruz)
   double? pendingWeight;
   String? pendingWeightUnit;
   double? pendingUnitByWeight;
@@ -227,14 +196,14 @@ List<LineItem> parseBodySequential(
   final items = <LineItem>[];
 
   bool looksLikeHeaderOrTotals(String u) {
-    // üst bölüm / alt toplamlar için kaba filtre
+    // ust bolum / alt toplamlar icin kaba filtre
     return u.contains('TOPLAM') ||
         u.contains('TOPKDV') ||
         u.contains('KDV ORANI') ||
         u.contains('KREDI KARTI') ||
         u.contains('NAKIT') ||
-        u.contains('TÜR:') ||
-        u.contains('MÜSTERI') ||
+        u.contains('TUR:') ||
+        u.contains('MUSTER') ||
         u.contains('BELGE NO') ||
         u.contains('ETTN') ||
         u.contains('FIS NO') ||
@@ -246,7 +215,7 @@ List<LineItem> parseBodySequential(
     final raw = lines[i];
     final u = raw.toUpperCase();
 
-    // Belli başlı bloklarda çık
+    // Belli basli bloklarda cik
     if (looksLikeHeaderOrTotals(u)) {
       log?.call('— stop at L$i "$raw"');
       break;
@@ -256,6 +225,7 @@ List<LineItem> parseBodySequential(
     final qu = _parseQtyUnit(raw);
     if (qu != null) {
       pendingUnitByQty = qu.unit;
+      // ileride istersen quantity de ekleyebiliriz
       log?.call('  ↳ remember QTY=${qu.qty} unit=${qu.unit}');
       continue;
     }
@@ -281,20 +251,24 @@ List<LineItem> parseBodySequential(
     // *9,95 gibi fiyat geldi mi?
     final amt = _parseAmount(raw);
     if (amt != null) {
-      // isim kuyruğundan son adı çek
-      final name = nameQueue.isNotEmpty ? nameQueue.removeLast() : 'Ürün';
+      // isim kuyugundan son adi cek
+      final name = nameQueue.isNotEmpty ? nameQueue.removeLast() : 'Urun';
       log?.call('  √ ITEM name="$name" vat=${pendingVat ?? '∅'} total=$amt');
+
       items.add(
         LineItem(
           name: name,
           totalPrice: amt,
-          vatPercent: pendingVat,
-          quantity: null,
-          weight: pendingWeight,
+          quantity: null, // seq parser unit price hesaplamiyor
+          unitPrice: null,
           weightUnit: pendingWeightUnit,
+          weight: pendingWeight,
+          vatPercent: pendingVat,
+          priceWasComputed: false,
         ),
       );
-      // state’i sıfırla
+
+      // state sifirla
       pendingVat = null;
       pendingUnitByQty = null;
       pendingWeight = null;
@@ -303,8 +277,7 @@ List<LineItem> parseBodySequential(
       continue;
     }
 
-    // Buraya geldiyse; bu bir “isim” adayıdır
-    // “çok teknik” / “sayaç” gibi kelimeleri filtreleme
+    // Buraya geldiyse; bu bir "isim" adayi
     if (!RegExp(r'^\d+$').hasMatch(raw)) {
       nameQueue.add(raw);
       log?.call('  + queue NAME "$raw" (len=${nameQueue.length})');

@@ -1,4 +1,4 @@
-#Thu Nov 20 13:09:22 TRT 2025
+#Fri Nov 28 18:45:24 TRT 2025
 base.0=C\:\\projects\\data_sender\\build\\app\\intermediates\\dex\\release\\mergeDexRelease\\classes.dex
 base.1=C\:\\projects\\data_sender\\build\\app\\intermediates\\dex\\release\\mergeDexRelease\\classes2.dex
 path.0=classes.dex

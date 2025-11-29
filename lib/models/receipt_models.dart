@@ -22,6 +22,20 @@ class ReceiptHeader {
     this.receiptNo,
     this.confidence = 0.0,
   });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'businessName': businessName,
+      'address': address,
+      'phone': phone,
+      'taxOffice': taxOffice,
+      'taxNumber': taxNumber,
+      'date': date?.toIso8601String(),
+      'time': time,
+      'receiptNo': receiptNo,
+      'confidence': confidence,
+    };
+  }
 }
 
 class LineItem {
@@ -66,12 +80,29 @@ class LineItem {
       priceWasComputed: priceWasComputed ?? this.priceWasComputed,
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'name': name,
+      'quantity': quantity,
+      'unitPrice': unitPrice,
+      'weightUnit': weightUnit,
+      'weight': weight,
+      'vatPercent': vatPercent,
+      'totalPrice': totalPrice,
+      'priceWasComputed': priceWasComputed,
+    };
+  }
 }
 
 class DiscountLine {
   final String name; // İndirim satırı adı
   final double amount; // Negatif değer şeklinde normalize (örn: -3,00)
   const DiscountLine({required this.name, required this.amount});
+
+  Map<String, dynamic> toJson() {
+    return {'name': name, 'amount': amount};
+  }
 }
 
 class ReceiptTotals {
@@ -87,6 +118,15 @@ class ReceiptTotals {
     this.bank,
     this.provisionNo,
   });
+  Map<String, dynamic> toJson() {
+    return {
+      'topKdv': topKdv,
+      'total': total,
+      'paymentMethod': paymentMethod,
+      'bank': bank,
+      'provisionNo': provisionNo,
+    };
+  }
 }
 
 class ReceiptParseResult {
@@ -103,4 +143,13 @@ class ReceiptParseResult {
     required this.totals,
     this.misc = const [],
   });
+  Map<String, dynamic> toJson() {
+    return {
+      'header': header.toJson(),
+      'items': items.map((e) => e.toJson()).toList(),
+      'discounts': discounts.map((e) => e.toJson()).toList(),
+      'totals': totals.toJson(),
+      'misc': misc,
+    };
+  }
 }

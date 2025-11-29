@@ -1,9 +1,14 @@
+// lib/services/receipt_parser.dart
 import 'dart:math';
+
 import '../models/receipt_models.dart';
 import 'receipt_patterns.dart';
+import 'receipt_body_parser.dart' as seq;
+import 'receipt_body_parser_coord.dart' as coord;
+import 'ocr_service.dart' show OcrElement;
 
 class ReceiptParser2 {
-  // YENİ: Sadece header parse et
+  // HEADER ONLY aynen kalsin
   ReceiptHeader parseHeaderOnly(String text) {
     final lines =
         text
@@ -11,49 +16,87 @@ class ReceiptParser2 {
             .map((s) => s.trim())
             .where((s) => s.isNotEmpty)
             .toList();
-    return _parseHeader(lines); // parseFull içinde kullandığın iç fonksiyon
+    return _parseHeader(lines);
   }
 
-  // ReceiptParseResult parseFull(String rawText) {
-  //   final lines =
-  //       rawText
-  //           .split(RegExp(r'[\r\n]+'))
-  //           .map((e) => normalizeSpaces(e))
-  //           .where((e) => e.isNotEmpty)
-  //           .toList();
+  /// Header + Body + Totals hepsini tek seferde doner
+  ReceiptParseResult parseFull(
+    String rawText, {
+    List<OcrElement>? elements,
+    void Function(String msg)? log,
+  }) {
+    // Tum satirlari normalize et
+    final lines =
+        rawText
+            .split(RegExp(r'[\r\n]+'))
+            .map((e) => normalizeSpaces(e)) // receipt_patterns.dart icindeki
+            .where((e) => e.isNotEmpty)
+            .toList();
 
-  //   // Body başlangıcını ÖNCE bul (ilk %KDV + satır sonu fiyat görülen satır)
-  //   final bodyStart = _guessBodyStartSmart(lines);
+    // Body baslangic tahmini
+    final bodyStart = _guessBodyStartSmart(lines);
 
-  //   // Header’ı, bodyStart’tan ÖNCEKİ bölümden çıkar (ürün satırları karışmasın)
-  //   final header = _parseHeader(lines, endExclusive: bodyStart);
+    // Header: bodyStart'tan onceki kisimdan
+    final header = _parseHeader(lines, endExclusive: bodyStart);
 
-  //   // Gövde ve toplamlar
-  //   final bodyLines =
-  //       bodyStart < lines.length ? lines.sublist(bodyStart) : <String>[];
-  //   final body = _parseBody(bodyLines);
-  //   final totals = _parseTotals(lines);
+    // ---- BODY (urun satirlari)
+    // 1) sequential parser her zaman calisir
+    final seqItems = seq.parseBodySequential(
+      lines,
+      log: (m) => log?.call('[SEQ] $m'),
+    ); // List<LineItem> (ana model)
 
-  //   // Misc (opsiyonel)
-  //   final misc = <String>[];
-  //   for (final l in lines.reversed) {
-  //     if (rxProvision.hasMatch(l) || rxPaymentMethod.hasMatch(l)) continue;
-  //     final u = l.toUpperCase();
-  //     if (u.contains('İADE') || u.contains('GARANT') || u.contains('SERVİS')) {
-  //       misc.add(l);
-  //     }
-  //     if (misc.length > 6) break;
-  //   }
+    // 2) varsa koordinat tabanli parser ile deneyip, bos degilse onu tercih et
+    List<LineItem> items;
+    if (elements != null && elements.isNotEmpty) {
+      final coordItems = coord.parseByGeometry(
+        elements: elements,
+        log: (m) => log?.call('[COORD] $m'),
+      ); // List<coord.LineItem>
 
-  //   return ReceiptParseResult(
-  //     header: header,
-  //     items: body.items,
-  //     discounts: body.discounts,
-  //     totals: totals,
-  //     misc: misc.reversed.toList(),
-  //   );
-  // }
+      if (coordItems.isNotEmpty) {
+        items =
+            coordItems
+                .map(
+                  (it) => LineItem(
+                    name: it.name,
+                    totalPrice: it.totalPrice,
+                    vatPercent: it.vatPercent?.round(),
+                    quantity: it.quantity,
+                    unitPrice: it.unitPrice,
+                    weightUnit: it.weightUnit,
+                    weight: it.weight,
+                    priceWasComputed: it.priceWasComputed,
+                  ),
+                )
+                .toList();
+      } else {
+        items = seqItems;
+      }
+    } else {
+      items = seqItems;
+    }
 
+    // ---- TOTALS
+    final totals = seq.extractTotals(lines); // ReceiptTotals (ana model)
+
+    // Indirimleri simdilik bos birakiyoruz
+    final discounts = <DiscountLine>[];
+
+    // Misc'i simdilik bos birak
+    return ReceiptParseResult(
+      header: header,
+      items: items,
+      discounts: discounts,
+      totals: totals,
+      misc: const [],
+    );
+  }
+
+  // ---- BURADAN SONRASI SENDE ZATEN VARDI (header, bodyStart vs.) ----
+  // _parseHeader, _guessBusinessName, _guessBodyStartSmart, _parseTotals vs
+  // onlara dokunmana gerek yok; sadece _parseTotals'i kullanmiyoruz artık.
+  // ...
   // ————— HEADER —————
 
   ReceiptHeader _parseHeader(List<String> lines, {int? endExclusive}) {
@@ -95,7 +138,7 @@ class ReceiptParser2 {
         }
       }
 
-      // saat: önce LABELLED (Saat 17.58), yoksa sadece ":"’lu saat kabul
+      // saat
       String? t;
       final tl = rxTimeLabelled.firstMatch(l);
       if (tl != null) {
@@ -115,7 +158,7 @@ class ReceiptParser2 {
         score += 0.4;
       }
 
-      // telefon (yalnızca etiketli veya klasik biçim)
+      // telefon
       if (phone == null) {
         if (rxPhoneLabel.hasMatch(l) || rxPhoneClassic.hasMatch(l)) {
           final m = rxPhoneClassic.firstMatch(l);
@@ -136,7 +179,7 @@ class ReceiptParser2 {
         score += 0.3;
       }
 
-      // vergi no (10 hane ipucu)
+      // vergi no
       final digit = rxTenElevenDigits.firstMatch(l);
       if (digit != null) {
         final s = digit.group(0)!;
@@ -146,7 +189,7 @@ class ReceiptParser2 {
         }
       }
 
-      // adres (stop kelimesi gelene kadar)
+      // adres
       if (!stopAddress) {
         final isAddressy = RegExp(
           r'\b(sok|sokak|cad|cadde|mh|mah|mahalle|no[:.]?|blok|bina|apt|bulvar|blv|sk|cd)\b',
@@ -158,7 +201,6 @@ class ReceiptParser2 {
       }
     }
 
-    // işletme adı
     businessName = _guessBusinessName(slice);
 
     return ReceiptHeader(
@@ -191,9 +233,8 @@ class ReceiptParser2 {
     return slice.isNotEmpty ? slice.first : null;
   }
 
-  // ————— BODY —————
-  // Alt/özet alan anahtarları – ürün adı değildir
-  // Ad/başlık sayılmayacak ipuçları
+  // ————— BODY START GUESS —————
+
   final _forbiddenNameHints = <RegExp>[
     RegExp(r'\bKAS[İI]YER\b', caseSensitive: false),
     RegExp(r'\b(BELGE|MERS[İI]S)\s*NO\b', caseSensitive: false),
@@ -204,61 +245,33 @@ class ReceiptParser2 {
     RegExp(r'\bTOPLAM\b', caseSensitive: false),
     RegExp(r'\bTOPKDV\b', caseSensitive: false),
     RegExp(r'KDV\s*ORAN[Iİ]', caseSensitive: false),
-    // Adres/başlık ipuçları
     RegExp(r'\b(MH\.?|MAH\.?|MAHALLES[İI])\b', caseSensitive: false),
     RegExp(r'\b(SOK\.?|SOKAK|CD\.?|CADDE|BULVARI?)\b', caseSensitive: false),
     RegExp(r'\bNO[:/ ]?\s*\d+', caseSensitive: false),
-    RegExp(r'\bV\.?D\.?\b', caseSensitive: false), // Vergi dairesi kısaltması
+    RegExp(r'\bV\.?D\.?\b', caseSensitive: false),
   ];
 
-  final RegExp rxVatToken = RegExp(r'[%º°oO]\s?\d{1,2}'); // %8, %18 vb
+  final RegExp rxVatToken = RegExp(r'[%º°oO]\s?\d{1,2}');
 
   bool _isForbiddenNameLine(String s) {
     final u = s.toUpperCase();
-    if (u.contains('TARİH') || u.contains('SAAT') || u.contains('FİŞ NO'))
+    if (u.contains('TARİH') || u.contains('SAAT') || u.contains('FİŞ NO')) {
       return true;
+    }
     for (final rx in _forbiddenNameHints) {
       if (rx.hasMatch(s)) return true;
     }
     return false;
   }
 
-  // Sadece fiyat satırı mı? (harf yok, sondaki fiyat)
   bool isPriceOnlyLine(String l) {
     final noLetters = !RegExp(r'[A-Za-zÇĞİÖŞÜçğıöşü]').hasMatch(l);
     return noLetters && rxPriceAtEnd.hasMatch(l);
   }
 
-  bool _looksLikeProductLine(String l) {
-    final u = l.toUpperCase();
-
-    // top/bottom alanlarını dışla
-    if (u.contains('TOPLAM') || u.contains('TOPKDV')) return false;
-    if (rxPaymentMethod.hasMatch(l) || rxProvision.hasMatch(l)) return false;
-
-    // sonda fiyat şart
-    if (!rxPriceAtEnd.hasMatch(l)) return false;
-
-    // tipik ipuçları
-    if (rxVat.hasMatch(l)) return true; // %01 / º18 / o8 …
-    if (rxQtyUnit.hasMatch(l)) return true; // 3 x 6,95
-    if (rxWeightUnit.hasMatch(l)) return true; // 1,535 kg x 14,90
-
-    // KDV OCR'da düşerse: "ad + rakamlar + sonda fiyat" kombinasyonu
-    final hasLetters = RegExp(r'[A-Za-zÇĞİÖŞÜçğıöşü]').hasMatch(l);
-    final hasDigits = RegExp(r'\d').hasMatch(l);
-    if (hasLetters && hasDigits) return true;
-
-    return false;
-  }
-
-  // ——— BODY START BUL ———
-
-  // Artık “ürün adı + sonraki satırlarda fiyat” desenini de gözetiyor
   int _guessBodyStartSmart(List<String> lines) {
     final n = lines.length;
 
-    // Toplam/KDV tablosundan ÖNCE arayacağız
     int searchEnd = n;
     for (var i = 0; i < n; i++) {
       final u = lines[i].toUpperCase();
@@ -276,14 +289,12 @@ class ReceiptParser2 {
       return hasLetters && !hasPrice && !_isForbiddenNameLine(s);
     }
 
-    // 1) Peş peşe ≥3 "isim gibi" satır + İLERİDE (≤12 satır) en az 1 fiyat VE 2 KDV token
     var run = 0;
     for (var i = 0; i < searchEnd; i++) {
       if (looksLikeName(lines[i])) {
         run++;
         if (run >= 3) {
           final start = i - run + 1;
-          // lookahead penceresi
           final end = (i + 12 < searchEnd) ? i + 12 : searchEnd - 1;
           int priceHits = 0, vatHits = 0;
           for (var k = start; k <= end; k++) {
@@ -291,7 +302,7 @@ class ReceiptParser2 {
             if (rxVatToken.hasMatch(lines[k])) vatHits++;
           }
           if (priceHits >= 1 && vatHits >= 2) {
-            print('[BODY] start=$start (≥3 name-like + lookahead price/vat)');
+            print('[BODY] start=$start (>=3 name-like + lookahead price/vat)');
             return start;
           }
         }
@@ -300,7 +311,6 @@ class ReceiptParser2 {
       }
     }
 
-    // 2) Alternatif: isim gibi satır + ≤15 satır içinde fiyat/qty/weight
     for (var i = 0; i < searchEnd; i++) {
       if (!looksLikeName(lines[i])) continue;
       for (var k = i + 1; k < n && k <= i + 15 && k < searchEnd; k++) {
@@ -313,7 +323,6 @@ class ReceiptParser2 {
       }
     }
 
-    // 3) Fallback: ilk ürün fiyatı görünen satır (toplamlar hariç)
     for (var i = 0; i < searchEnd; i++) {
       final u = lines[i].toUpperCase();
       if (rxPriceAtEnd.hasMatch(lines[i]) &&
@@ -326,203 +335,4 @@ class ReceiptParser2 {
     print('[BODY] fallback start=10');
     return (n < 10) ? n : 10;
   }
-
-  // ——— BODY PARSE: SIRALI EŞLEŞTİRME ———
-  _BodyParse _parseBody(List<String> lines) {
-    final items = <LineItem>[];
-    final discounts = <DiscountLine>[];
-
-    bool inTotalsBlock = false;
-    bool inTaxTable = false; // "KDV Oranı KDV Dahil Tutar" tablosu
-
-    final pendingNames = <String>[];
-    final pendingVat = <int?>[];
-    int? lastItemIndex;
-
-    // bool inTaxTable = false;
-
-    for (var i = 0; i < lines.length; i++) {
-      final raw = lines[i];
-      final u = raw.toUpperCase();
-      print('[BODY L$i] "$raw"');
-
-      if (rxDivider.hasMatch(raw)) {
-        inTaxTable = false;
-        continue;
-      }
-      if (u.contains('KDV ORANI') && u.contains('KDV DAH')) {
-        // "KDV Oranı  KDV Dahil Tutar"
-        inTaxTable = true;
-        continue;
-      }
-      if (inTaxTable) {
-        // Bu bloktaki fiyatlar ürün DEĞİL → atla
-        continue;
-      }
-
-      // Ürün adı adayı: fiyat yok, alt bilgi değil
-      final hasLetters = RegExp(r'[A-Za-zÇĞİÖŞÜçğıöşü]').hasMatch(raw);
-      final hasPrice = rxPriceAtEnd.hasMatch(raw);
-      final isNameCandidate =
-          hasLetters && !hasPrice && !_isForbiddenNameLine(raw);
-      if (isNameCandidate) {
-        final name = raw.replaceAll(rxVat, '').trim();
-        if (name.isNotEmpty) {
-          pendingNames.add(name);
-          pendingVat.add(null);
-          print('  + queued name="$name" (pending=${pendingNames.length})');
-        }
-        continue;
-      }
-
-      // ... kalan mevcut “adet/weight → eşle”, “sadece fiyat → önceki ada bağla”
-      // bloklarınız aynı kalsın.
-    }
-
-    for (var i = 0; i < lines.length; i++) {
-      final raw = lines[i];
-      final u = raw.toUpperCase();
-      print('[BODY L$i] "$raw"');
-
-      // ---- Bölüm kontrolü
-      if (rxDivider.hasMatch(raw)) {
-        inTotalsBlock = false;
-        inTaxTable = false;
-        continue;
-      }
-      if (u.contains('KDV ORANI') && u.contains('KDV DAHIL')) {
-        inTaxTable = true;
-        continue;
-      }
-      if (u.contains('TOPKDV') ||
-          u.contains('TOPLAM') ||
-          rxPaymentMethod.hasMatch(raw) ||
-          rxProvision.hasMatch(raw)) {
-        inTotalsBlock = true;
-        continue;
-      }
-
-      // ---- Sadece KDV yüzdesi satırı
-      final onlyVat = RegExp(r'^[%º°oO]\s?(\d{1,2})$');
-      final mVatOnly = onlyVat.firstMatch(raw.trim());
-      if (mVatOnly != null) {
-        final v = int.tryParse(mVatOnly.group(1)!);
-        if (v != null) {
-          if (pendingNames.isNotEmpty) {
-            pendingVat[pendingVat.length - 1] = v;
-            print('  ↳ set pending VAT=$v to "${pendingNames.last}"');
-          } else if (lastItemIndex != null &&
-              lastItemIndex! >= 0 &&
-              lastItemIndex! < items.length &&
-              items[lastItemIndex!].vatPercent == null) {
-            items[lastItemIndex!] = items[lastItemIndex!].copyWith(
-              vatPercent: v,
-            );
-            print('  ↳ set last item VAT=$v');
-          }
-        }
-        continue;
-      }
-
-      // ---- Ürün adı adayı (alt bilgi değil, fiyat da yok)
-      final hasLetters = RegExp(r'[A-Za-zÇĞİÖŞÜçğıöşü]').hasMatch(raw);
-      final hasPrice = rxPriceAtEnd.hasMatch(raw);
-      final isNameCandidate =
-          hasLetters &&
-          !hasPrice &&
-          !inTotalsBlock &&
-          !inTaxTable &&
-          !_isForbiddenNameLine(raw);
-
-      if (isNameCandidate) {
-        final name = raw.replaceAll(rxVat, '').trim();
-        if (name.isNotEmpty) {
-          pendingNames.add(name);
-          pendingVat.add(null);
-          print('  + queued name="$name" (pending=${pendingNames.length})');
-        }
-        continue;
-      }
-
-      // ---- Adet/weight satırı -> sıradaki ada bağla (toplam/kdv tablosunda değilsek)
-      if ((rxQtyUnit.hasMatch(raw) || rxWeightUnit.hasMatch(raw)) &&
-          !inTotalsBlock &&
-          !inTaxTable) {
-        // ... (sizdeki aynı hesap kodu; değişmeden bırakın)
-        // Not: burada mevcut queue eşleştirme mantığınızla devam edin
-      }
-
-      // ---- Sadece fiyat satırı -> sıradaki ada bağla (toplam/kdv tablosunda değilsek)
-      if (isPriceOnlyLine(raw) && !inTotalsBlock && !inTaxTable) {
-        // ... (sizdeki aynı “price-only → queue” kodu)
-      }
-
-      // Diğerleri: atla (header/alt bilgi)
-    }
-
-    return _BodyParse(items: items, discounts: discounts);
-  }
-
-  String _flushNameBuffer(List<String> buf) {
-    final s = buf.join(' ').replaceAll(rxVat, '').trim();
-    buf.clear();
-    return s.isEmpty ? 'Ürün' : s;
-  }
-
-  String _flushWithPrefix(List<String> buf, String name) {
-    if (buf.isEmpty) return name;
-    final combined = '${buf.join(" ")} $name';
-    buf.clear();
-    return combined.trim();
-  }
-
-  // ————— TOTALS —————
-
-  ReceiptTotals _parseTotals(List<String> lines) {
-    double? topKdv;
-    double? total;
-    String? paymentMethod;
-    String? bank;
-    String? provisionNo;
-
-    for (final l in lines) {
-      final u = l.toUpperCase();
-
-      if (u.contains('TOPKDV')) {
-        final m = rxPriceAtEnd.firstMatch(l);
-        if (m != null) topKdv = parsePrice(m.group(1)!);
-      }
-      if (u.contains('TOPLAM')) {
-        final m = rxPriceAtEnd.firstMatch(l);
-        if (m != null) total = parsePrice(m.group(1)!);
-      }
-
-      final pm = rxPaymentMethod.firstMatch(l);
-      if (pm != null) {
-        paymentMethod = pm.group(0);
-        final bankHit = RegExp(
-          r'(akbank|yapı?kredi|finansbank|ziraat|halkbank|vakıf|i[sş]bank|garanti)',
-          caseSensitive: false,
-        ).firstMatch(l);
-        if (bankHit != null) bank = bankHit.group(0);
-      }
-
-      final pv = rxProvision.firstMatch(l);
-      if (pv != null) provisionNo = pv.group(1);
-    }
-
-    return ReceiptTotals(
-      topKdv: topKdv,
-      total: total,
-      paymentMethod: paymentMethod,
-      bank: bank,
-      provisionNo: provisionNo,
-    );
-  }
-}
-
-class _BodyParse {
-  final List<LineItem> items;
-  final List<DiscountLine> discounts;
-  _BodyParse({required this.items, required this.discounts});
 }
